@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Trending Math Art — Heart • Spiral • Lissajous</title>
+<style>
+  :root{
+    --bg:#060714; --panel:#0f1724; --muted:#98a8c7; --accent:#ff6b6b; --accent2:#7ee1b3;
+  }
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,#020317,#06102a);color:#e6eefc;font-family:Inter,system-ui,Arial}
+  .wrap{max-width:1100px;margin:28px auto;padding:18px;display:grid;grid-template-columns:1fr 320px;gap:16px}
+  @media(max-width:980px){.wrap{grid-template-columns:1fr;padding:12px}}
+  .canvasCard{background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent); border-radius:12px; padding:12px; box-shadow:0 10px 30px rgba(0,0,0,0.5)}
+  canvas{display:block;border-radius:10px;background:radial-gradient(circle at 20% 10%, rgba(126,225,179,0.03), transparent), #020610; width:100%; height:640px}
+  .controls{background:rgba(255,255,255,0.02); padding:12px; border-radius:10px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .btn{padding:10px 12px;border-radius:8px;border:none;background:linear-gradient(180deg,#1f2937,#111827);color:#fff;cursor:pointer}
+  .btn.primary{background:linear-gradient(180deg,#ef4444,#dc2626)}
+  .select, input[type="range"]{width:100%}
+  label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+  .muted{color:var(--muted);font-size:13px}
+  footer{grid-column:1/-1;text-align:center;color:var(--muted);margin-top:12px;font-size:13px}
+  .small{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="canvasCard">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h2 style="margin:0">🎨 Trending Math Art</h2>
+        <div class="muted small">Ready to film: press Play, then record screen</div>
+      </div>
+
+      <canvas id="stage" width="1000" height="640"></canvas>
+    </div>
+
+    <div class="controls">
+      <label>Scene</label>
+      <select id="sceneSelect" class="select">
+        <option value="heart">3D Rotating Heart ❤️</option>
+        <option value="spiral">Animated Spiral 🌌</option>
+        <option value="lissajous">Lissajous Curves 🎶</option>
+      </select>
+
+      <div style="margin-top:12px">
+        <label>Color Theme</label>
+        <select id="theme" class="select">
+          <option value="neon">Neon Pink</option>
+          <option value="aqua">Aqua Glow</option>
+          <option value="sun">Sunset</option>
+          <option value="mono">Monochrome</option>
+        </select>
+      </div>
+
+      <div style="margin-top:12px">
+        <label>Speed</label>
+        <input id="speed" type="range" min="0.2" max="3" step="0.1" value="1">
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button id="playBtn" class="btn primary">▶ Play</button>
+        <button id="pauseBtn" class="btn">⏸ Pause</button>
+        <button id="snapBtn" class="btn">📷 Snapshot</button>
+      </div>
+
+      <div style="margin-top:12px">
+        <label class="small">Background Music (mute/unmute)</label>
+        <audio id="bgAudio" loop>
+          <!-- Free short track: replace src with your own to avoid copyright issues -->
+          <source src="https://cdn.jsdelivr.net/gh/jecrespo/short-music@main/ambient-loop-60s.mp3" type="audio/mpeg">
+          Your browser does not support audio.
+        </audio>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="audioToggle" class="btn">🔊 Toggle Music</button>
+          <button id="muteBtn" class="btn">🔇 Mute (for record)</button>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <label class="small">Tips for Reels</label>
+        <ul class="small" style="line-height:1.4">
+          <li>Film a 15–30s segment focusing on a single scene.</li>
+          <li>Use fast zoom & rhythm edits synced to music.</li>
+          <li>Show a bit of code, then the animation result (people love “how I did it” cuts).</li>
+        </ul>
+      </div>
+    </div>
+
+    <footer>
+      <div>Built with canvas • parametric math • instant viral visuals</div>
+    </footer>
+  </div>
+
+<script>
+/* ====== Setup ====== */
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d', { alpha: true });
+let W = canvas.width = canvas.clientWidth * devicePixelRatio;
+let H = canvas.height = canvas.clientHeight * devicePixelRatio;
+canvas.style.width = canvas.clientWidth + 'px';
+canvas.style.height = canvas.clientHeight + 'px';
+
+window.addEventListener('resize', ()=>{
+  W = canvas.width = canvas.clientWidth * devicePixelRatio;
+  H = canvas.height = canvas.clientHeight * devicePixelRatio;
+});
+
+/* UI */
+const sceneSelect = document.getElementById('sceneSelect');
+const themeSel = document.getElementById('theme');
+const speedEl = document.getElementById('speed');
+const playBtn = document.getElementById('playBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const snapBtn = document.getElementById('snapBtn');
+const audioToggle = document.getElementById('audioToggle');
+const muteBtn = document.getElementById('muteBtn');
+const bgAudio = document.getElementById('bgAudio');
+
+let playing = false;
+let t = 0;
+let lastTs = 0;
+let speed = parseFloat(speedEl.value);
+
+/* Themes */
+const THEMES = {
+  neon: {bg:'#020317', colors:['#ff6b6b','#ff9aa2','#ff6b6b']},
+  aqua: {bg:'#00111b', colors:['#7ee1b3','#6ee7ff','#a78bfa']},
+  sun: {bg:'#120512', colors:['#ffb86b','#ffd27a','#ff6b6b']},
+  mono: {bg:'#0b0b0b', colors:['#cccccc','#7f7f7f','#e6e6e6']}
+};
+
+function setTheme(name){
+  const th = THEMES[name] || THEMES.neon;
+  document.body.style.background = `linear-gradient(180deg, ${th.bg}, #030317)`;
+}
+setTheme(themeSel.value);
+
+/* Controls */
+themeSel.addEventListener('change', ()=> setTheme(themeSel.value));
+speedEl.addEventListener('input', ()=> speed = parseFloat(speedEl.value));
+playBtn.addEventListener('click', ()=> { if(!playing){ playing = true; lastTs = performance.now(); bgAudio.play().catch(()=>{}); requestAnimationFrame(loop);} });
+pauseBtn.addEventListener('click', ()=> { playing = false; bgAudio.pause(); });
+audioToggle.addEventListener('click', ()=> {
+  if(bgAudio.paused) bgAudio.play(); else bgAudio.pause();
+});
+muteBtn.addEventListener('click', ()=> { bgAudio.muted = !bgAudio.muted; muteBtn.textContent = bgAudio.muted ? '🔈 Unmute' : '🔇 Mute'; });
+
+snapBtn.addEventListener('click', ()=> {
+  const data = canvas.toDataURL('image/png');
+  const a = document.createElement('a'); a.href = data; a.download = 'math-art.png'; a.click();
+});
+
+/* Basic utilities */
+function px(x){ return x * devicePixelRatio; }
+function clear(){
+  ctx.clearRect(0,0,W,H);
+}
+
+/* ===== Scene: 3D Rotating Heart =====
+ We'll take a parametric 2D heart curve (x(t), y(t)), extrude it along a circular "depth"
+ and rotate the 3D points around Y axis; simple perspective projection.
+*/
+function heartCurve2D(theta){
+  // classic parametric heart
+  const x = 16 * Math.pow(Math.sin(theta), 3);
+  const y = 13 * Math.cos(theta) - 5 * Math.cos(2*theta) - 2 * Math.cos(3*theta) - Math.cos(4*theta);
+  return [x, -y]; // flip vertically
+}
+
+function drawHeart3D(time, opts){
+  const cx = W/2, cy = H/2;
+  const scale = Math.min(W,H) * 0.0125;
+  const rot = time * 0.6 * opts.speed;
+  const slices = 40;
+  const points = [];
+  // sample base curve
+  for(let i=0;i<200;i++){
+    const th = (i/200) * Math.PI * 2;
+    const [x2,y2] = heartCurve2D(th);
+    points.push([x2*scale, y2*scale]);
+  }
+  // extrude by rotating each base point around Y axis along a small depth circle
+  const layers = 10;
+  const depths = [];
+  for(let l=0;l<layers;l++){
+    const thetaL = (l/layers) * Math.PI * 2;
+    depths.push(0.6 * Math.sin(thetaL) );
+  }
+
+  // render back-to-front by depth
+  const drawQueue = [];
+  for(let l=0;l<layers;l++){
+    const d = depths[l];
+    const layerPoints = [];
+    for(let i=0;i<points.length;i++){
+      const [x,y] = points[i];
+      // 3D point before rotation
+      let X = x;
+      let Y = y;
+      let Z = d * 30; // depth amplitude
+      // rotate around Y
+      const cosr = Math.cos(rot + (i/points.length)*1.2);
+      const sinr = Math.sin(rot + (i/points.length)*1.2);
+      const XR = X * cosr + Z * sinr;
+      const ZR = -X * sinr + Z * cosr;
+      // perspective
+      const fov = 600;
+      const perspective = fov / (fov + ZR);
+      const sx = cx + XR * perspective;
+      const sy = cy + Y * perspective;
+      layerPoints.push({x:sx,y:sy,z:ZR});
+    }
+    drawQueue.push({layer:l, pts:layerPoints, z:depths[l]});
+  }
+
+  // glow + fill style
+  const theme = THEMES[themeSel.value].colors;
+  // draw farther layers first
+  drawQueue.sort((a,b)=>a.z - b.z);
+  for(let q of drawQueue){
+    ctx.beginPath();
+    const pts = q.pts;
+    for(let i=0;i<pts.length;i++){
+      const p = pts[i];
+      if(i===0) ctx.moveTo(p.x,p.y);
+      else ctx.lineTo(p.x,p.y);
+    }
+    ctx.closePath();
+    // fill with gradient
+    const g = ctx.createLinearGradient(W/2, H/2 - 200, W/2, H/2 + 200);
+    g.addColorStop(0, hexFade(theme[0], 0.08 + (q.layer/20)));
+    g.addColorStop(0.6, hexFade(theme[1], 0.06 + (q.layer/40)));
+    g.addColorStop(1, hexFade(theme[2], 0.02));
+    ctx.fillStyle = g;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fill();
+  }
+
+  // outline
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.strokeStyle = hexFade('#ffffff', 0.08);
+  ctx.lineWidth = px(1.2);
+  ctx.beginPath();
+  const outline = drawQueue[Math.floor(layers/2)].pts;
+  for(let i=0;i<outline.length;i++){
+    const p = outline[i];
+    if(i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+}
+
+/* ===== Scene: Animated Spiral ===== */
+function drawSpiral(time, opts){
+  const cx = W/2, cy = H/2;
+  const R = Math.min(W,H) * 0.36;
+  const turns = 4 + 1.5 * Math.sin(time*0.2*opts.speed);
+  const points = 800;
+  ctx.lineWidth = px(1.2);
+  ctx.globalCompositeOperation = 'lighter';
+  for(let i=0;i<points;i++){
+    const p = i / (points-1);
+    const angle = p * Math.PI * 2 * turns + time * 0.9 * opts.speed;
+    const radius = R * p * (0.18 + 0.82 * p);
+    const x = cx + radius * Math.cos(angle + Math.sin(p*12+time*0.3)*0.2);
+    const y = cy + radius * Math.sin(angle + Math.cos(p*14+time*0.2)*0.18);
+    // color ramp
+    const theme = THEMES[themeSel.value].colors;
+    const cidx = Math.floor((p * (theme.length)) % theme.length);
+    ctx.fillStyle = hexFade(theme[cidx], 0.9 - p*0.7);
+    ctx.beginPath();
+    ctx.ellipse(x, y, px(1.6 + p*1.8), px(1.6 + p*1.8), 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* ===== Scene: Lissajous Curves ===== */
+function drawLissajous(time, opts){
+  const cx = W/2, cy = H/2;
+  const A = Math.min(W,H) * 0.36;
+  const points = 1600;
+  const a = 3 + Math.round(2*Math.sin(time*0.12*opts.speed));
+  const b = 2 + Math.round(3*Math.cos(time*0.09*opts.speed));
+  const delta = Math.PI/2 * Math.sin(time*0.2*opts.speed);
+  ctx.globalCompositeOperation = 'lighter';
+  for(let layer = 0; layer < 4; layer++){
+    ctx.beginPath();
+    for(let i=0;i<points;i++){
+      const t = (i/points) * Math.PI * 2;
+      const x = cx + A * 0.9 * Math.sin(a * t + delta + layer*0.2);
+      const y = cy + A * 0.6 * Math.sin(b * t);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    const theme = THEMES[themeSel.value].colors;
+    ctx.strokeStyle = hexFade(theme[layer % theme.length], 0.5 - layer*0.08);
+    ctx.lineWidth = px(1.4 + layer*0.6);
+    ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* ===== Helpers: color fade & hex utils ===== */
+function hexToRgb(hex){
+  hex = hex.replace('#','');
+  if(hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+  const int = parseInt(hex,16);
+  return {r:(int>>16)&255, g:(int>>8)&255, b:int&255};
+}
+function hexFade(hex, alpha){
+  const c = hexToRgb(hex);
+  return `rgba(${c.r},${c.g},${c.b},${alpha})`;
+}
+
+/* ===== Main loop ===== */
+function renderScene(now){
+  const theme = THEMES[themeSel.value];
+  // background
+  ctx.fillStyle = 'rgba(2,6,18,0.25)';
+  ctx.fillRect(0,0,W,H);
+
+  // vignette
+  const g = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.05, W/2, H/2, Math.max(W,H)*0.8);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.45)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,W,H);
+
+  const opts = {speed: speed};
+
+  const scene = sceneSelect.value;
+  if(scene === 'heart') drawHeart3D(now*0.001, opts);
+  else if(scene === 'spiral') drawSpiral(now*0.001, opts);
+  else drawLissajous(now*0.001, opts);
+}
+
+function loop(ts){
+  if(!playing) return;
+  const dt = (ts - lastTs) / 1000;
+  lastTs = ts;
+  t += dt * speed;
+  clear();
+  // subtle trailing effect using semi-transparent fill for motion blur
+  ctx.fillStyle = 'rgba(2,6,12,0.06)';
+  ctx.fillRect(0,0,W,H);
+  renderScene(ts);
+  requestAnimationFrame(loop);
+}
+
+/* Auto-play small demo */
+setTimeout(()=> {
+  // preload audio silently
+  bgAudio.volume = 0.6;
+  // don't auto-play audio without user interaction in many browsers — user should press Play
+}, 400);
+
+/* Helpful note: browsers often block autoplay. Use Play button. */
+
+/* ===== Extra: keyboard shortcuts ===== */
+window.addEventListener('keydown', (e)=>{
+  if(e.key === ' ') { // space toggles play
+    e.preventDefault();
+    if(playing){ playing=false; bgAudio.pause(); } else { playing=true; lastTs=performance.now(); bgAudio.play().catch(()=>{}); requestAnimationFrame(loop); }
+  }
+  if(e.key.toLowerCase() === '1') sceneSelect.value='heart';
+  if(e.key.toLowerCase() === '2') sceneSelect.value='spiral';
+  if(e.key.toLowerCase() === '3') sceneSelect.value='lissajous';
+});
+
+/* initialize size and draw once */
+clear();
+renderScene(performance.now());
+
+</script>
+</body>
+</html>
